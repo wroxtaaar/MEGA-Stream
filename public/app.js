@@ -10,6 +10,8 @@ const nowPlaying = $("#now-playing");
 const breadcrumb = $("#breadcrumbs");
 const backButton = $("#back-folder");
 const sortSelect = $("#sort-by");
+const accountFilter = $("#account-filter");
+let accountList = [];
 const aspectSelect = $("#aspect-ratio");
 const playerStage = $("#player-stage");
 const playerOverlay = $("#player-overlay");
@@ -45,9 +47,10 @@ async function api(url) {
 async function checkStatus() {
   try {
     const status = await api("/api/status");
+    updateAccountFilter(status.accounts || []);
+    if (status.error) showNotice(status.error);
     connection.classList.toggle("ok", status.megaConnected);
     connection.lastChild.textContent = status.megaConnected ? " MEGA connected" : " MEGA reconnect needed";
-    if (status.error) showNotice(status.error);
     await loadLibrary();
   } catch (error) {
     connection.lastChild.textContent = " Service unavailable";
@@ -59,9 +62,10 @@ async function loadLibrary(force = false) {
   hideNotice();
   try {
     const suffix = force ? "?refresh=1" : "";
-    const [videoData, folderData] = await Promise.all([api("/api/videos" + suffix), api("/api/folders" + suffix)]);
+    const [videoData, folderData, accountData] = await Promise.all([api("/api/videos" + suffix), api("/api/folders" + suffix), api("/api/accounts")]);
     videos = videoData.videos || [];
     folders = folderData.folders || [];
+    updateAccountFilter(accountData.accounts || []);
     renderLibrary();
     summary.textContent = videos.length + " video" + (videos.length === 1 ? "" : "s") + " · " + folders.length + " folder" + (folders.length === 1 ? "" : "s") + " · stored in MEGA";
     connection.classList.add("ok");
@@ -70,6 +74,26 @@ async function loadLibrary(force = false) {
     summary.textContent = "Could not load the library";
     showNotice(error.message);
   }
+}
+function updateAccountFilter(accounts) {
+  accountList = accounts;
+  const selected = accountFilter.value || "all";
+  accountFilter.replaceChildren();
+  const allOption = document.createElement("option");
+  allOption.value = "all";
+  allOption.textContent = "All accounts";
+  accountFilter.append(allOption);
+  for (const account of accounts) {
+    const option = document.createElement("option");
+    option.value = account.id;
+    option.textContent = account.name + (account.connected ? "" : " (offline)");
+    accountFilter.append(option);
+  }
+  accountFilter.value = accounts.some((account) => account.id === selected) ? selected : "all";
+}
+function accountFiltered(items) {
+  const selected = accountFilter.value;
+  return selected === "all" ? items : items.filter((item) => item.accountId === selected);
 }
 function openFolder(path) {
   currentFolder = path;
@@ -115,7 +139,7 @@ function createFolderCard(folder) {
   const name = document.createElement("span");
   name.className = "folder-name";
   name.textContent = folder.name;
-  const count = videos.filter(v => v.folderPath === folder.path || v.folderPath.startsWith(folder.path + "/")).length;
+  const count = videos.filter(v => v.accountId === folder.accountId && (v.folderPath === folder.path || v.folderPath.startsWith(folder.path + "/"))).length;
   const meta = document.createElement("span");
   meta.className = "folder-meta";
   meta.textContent = count + " video" + (count === 1 ? "" : "s") + " in this folder and subfolders";
@@ -155,8 +179,8 @@ function createVideoCard(video) {
   meta.append(size);
   const pathLine = document.createElement("div");
   pathLine.className = "path-line";
-  pathLine.textContent = video.folderPath || "My Drive";
-  pathLine.title = video.path;
+  pathLine.textContent = (video.folderPath || "My Drive") + " · " + (video.accountName || "MEGA");
+  pathLine.title = video.accountName + " · " + video.path;
   info.append(name, meta, pathLine);
   card.append(poster, info);
   card.addEventListener("click", () => playVideo(video));
@@ -175,20 +199,22 @@ function sortFolders(items) {
 }
 function renderLibrary() {
   const query = search.value.trim().toLocaleLowerCase();
+  const visibleVideos = accountFiltered(videos);
+  const visibleFolders = accountFiltered(folders);
   searchMode = Boolean(query);
   renderBreadcrumbs();
   backButton.classList.toggle("hidden", !currentFolder);
   grid.replaceChildren();
   const fragment = document.createDocumentFragment();
   if (searchMode) {
-    const matchingFolders = folders.filter(f => (f.name + " " + f.path).toLocaleLowerCase().includes(query));
-    const matchingVideos = videos.filter(v => (v.name + " " + v.path).toLocaleLowerCase().includes(query));
+    const matchingFolders = visibleFolders.filter(f => (f.name + " " + f.path + " " + f.accountName).toLocaleLowerCase().includes(query));
+    const matchingVideos = visibleVideos.filter(v => (v.name + " " + v.path + " " + v.accountName).toLocaleLowerCase().includes(query));
     sortFolders(matchingFolders).forEach(f => fragment.append(createFolderCard(f)));
     sortVideos(matchingVideos).forEach(v => fragment.append(createVideoCard(v)));
     $("#empty-state").classList.toggle("hidden", matchingFolders.length + matchingVideos.length > 0);
   } else {
-    const childFolders = folders.filter(f => f.parentPath === currentFolder);
-    const currentVideos = videos.filter(v => v.folderPath === currentFolder);
+    const childFolders = visibleFolders.filter(f => f.parentPath === currentFolder);
+    const currentVideos = visibleVideos.filter(v => v.folderPath === currentFolder);
     sortFolders(childFolders).forEach(f => fragment.append(createFolderCard(f)));
     sortVideos(currentVideos).forEach(v => fragment.append(createVideoCard(v)));
     $("#empty-state").classList.toggle("hidden", childFolders.length + currentVideos.length > 0);
@@ -334,4 +360,5 @@ document.addEventListener("fullscreenchange", () => {
 window.addEventListener("resize", () => { if (!playerPanel.classList.contains("hidden")) applyAspectRatio(); });
 playerStage.addEventListener("pointermove", () => { if (document.fullscreenElement === playerStage) revealOverlay(); });
 sortSelect.addEventListener("change", renderLibrary);
+accountFilter.addEventListener("change", () => { currentFolder = ""; renderLibrary(); });
 checkStatus();
