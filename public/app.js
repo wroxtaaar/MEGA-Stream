@@ -272,7 +272,8 @@ async function toggleFullscreen() {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
     else if (player.requestFullscreen) await player.requestFullscreen();
-    else if (player.webkitEnterFullscreen) player.webkitEnterFullscreen();
+    // Avoid native video fullscreen because it replaces our custom overlay with browser controls.
+    else throw new Error("Custom fullscreen is not supported by this browser.");
   } catch (error) {
     showNotice("Fullscreen is unavailable in this browser.");
   }
