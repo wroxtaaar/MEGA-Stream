@@ -192,23 +192,39 @@ function renderLibrary() {
 }
 function applyAspectRatio() {
   currentAspectRatio = aspectSelect.value;
+  const fullscreen = document.fullscreenElement === playerStage;
   if (currentAspectRatio === "original") {
     player.style.aspectRatio = "auto";
-    player.style.height = "auto";
     player.style.objectFit = "contain";
-    player.style.maxHeight = "70vh";
+    player.style.maxHeight = fullscreen ? "100vh" : "70vh";
+    player.style.width = fullscreen ? "100%" : "100%";
+    player.style.height = fullscreen ? "100%" : "auto";
     playerStage.style.aspectRatio = "auto";
+    playerStage.style.removeProperty("--selected-ratio");
     return;
   }
   const ratios = { "16:9": 16 / 9, "4:3": 4 / 3, "21:9": 21 / 9 };
   const ratio = ratios[currentAspectRatio];
   playerStage.style.aspectRatio = String(ratio);
+  playerStage.style.setProperty("--selected-ratio", String(ratio));
   player.style.aspectRatio = String(ratio);
-  player.style.width = "100%";
-  player.style.height = "100%";
-  player.style.maxHeight = "none";
   player.style.objectFit = "fill";
+  player.style.maxHeight = "none";
+  if (fullscreen) {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const fittedWidth = Math.min(width, height * ratio);
+    const fittedHeight = fittedWidth / ratio;
+    player.style.width = fittedWidth + "px";
+    player.style.height = fittedHeight + "px";
+    player.style.margin = "auto";
+  } else {
+    player.style.width = "100%";
+    player.style.height = "100%";
+    player.style.margin = "0";
+  }
 }
+
 function togglePlayerOverlay(force) {
   const show = typeof force === "boolean" ? force : playerOverlay.classList.contains("is-hidden");
   playerOverlay.classList.toggle("is-hidden", !show);
@@ -246,7 +262,7 @@ backButton.addEventListener("click", () => {
   renderLibrary();
 });
 search.addEventListener("input", renderLibrary);
-aspectSelect.addEventListener("change", applyAspectRatio);
+aspectSelect.addEventListener("change", () => { applyAspectRatio(); togglePlayerOverlay(false); });
 fullscreenButton.addEventListener("click", (event) => { event.stopPropagation(); toggleFullscreen(); });
 playerStage.addEventListener("click", (event) => {
   if (event.target.closest(".player-overlay") || event.target.closest("video")) {
