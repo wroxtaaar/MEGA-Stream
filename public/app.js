@@ -9,6 +9,7 @@ const player = $("#player");
 const nowPlaying = $("#now-playing");
 const breadcrumb = $("#breadcrumbs");
 const backButton = $("#back-folder");
+const sortSelect = $("#sort-by");
 let videos = [];
 let folders = [];
 let currentFolder = "";
@@ -151,6 +152,17 @@ function createVideoCard(video) {
   card.addEventListener("click", () => playVideo(video));
   return card;
 }
+function sortVideos(items) {
+  const mode = sortSelect.value;
+  return [...items].sort((a, b) => {
+    if (mode === "size-desc") return (b.size || 0) - (a.size || 0) || a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    if (mode === "size-asc") return (a.size || 0) - (b.size || 0) || a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+  });
+}
+function sortFolders(items) {
+  return [...items].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+}
 function renderLibrary() {
   const query = search.value.trim().toLocaleLowerCase();
   searchMode = Boolean(query);
@@ -161,14 +173,14 @@ function renderLibrary() {
   if (searchMode) {
     const matchingFolders = folders.filter(f => (f.name + " " + f.path).toLocaleLowerCase().includes(query));
     const matchingVideos = videos.filter(v => (v.name + " " + v.path).toLocaleLowerCase().includes(query));
-    matchingFolders.forEach(f => fragment.append(createFolderCard(f)));
-    matchingVideos.forEach(v => fragment.append(createVideoCard(v)));
+    sortFolders(matchingFolders).forEach(f => fragment.append(createFolderCard(f)));
+    sortVideos(matchingVideos).forEach(v => fragment.append(createVideoCard(v)));
     $("#empty-state").classList.toggle("hidden", matchingFolders.length + matchingVideos.length > 0);
   } else {
     const childFolders = folders.filter(f => f.parentPath === currentFolder);
     const currentVideos = videos.filter(v => v.folderPath === currentFolder);
-    childFolders.forEach(f => fragment.append(createFolderCard(f)));
-    currentVideos.forEach(v => fragment.append(createVideoCard(v)));
+    sortFolders(childFolders).forEach(f => fragment.append(createFolderCard(f)));
+    sortVideos(currentVideos).forEach(v => fragment.append(createVideoCard(v)));
     $("#empty-state").classList.toggle("hidden", childFolders.length + currentVideos.length > 0);
   }
   grid.append(fragment);
@@ -194,4 +206,5 @@ backButton.addEventListener("click", () => {
   renderLibrary();
 });
 search.addEventListener("input", renderLibrary);
+sortSelect.addEventListener("change", renderLibrary);
 checkStatus();
