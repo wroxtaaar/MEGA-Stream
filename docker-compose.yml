@@ -6,5 +6,5 @@ services:
     env_file:
       - .env
     ports:
-      - "8080:8080"
-    # For public access, put behind HTTPS and a trusted reverse proxy.
+      - "127.0.0.1:8080:8080"
+    # Exposed only on localhost; use Tailscale Serve or a trusted HTTPS reverse proxy.
