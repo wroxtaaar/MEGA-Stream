@@ -114,7 +114,7 @@ function playVideo(video) {
   player.play().catch(() => {});
 }
 $("#refresh").addEventListener("click", () => loadVideos(true));
-$($("#close-player").addEventListener("click", () => {
+$("#close-player").addEventListener("click", () => {
   player.pause();
   player.removeAttribute("src");
   player.load();
