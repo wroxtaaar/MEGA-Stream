@@ -309,8 +309,12 @@ volumeControl.addEventListener("input", () => { player.volume = Number(volumeCon
 ["timeupdate","durationchange","play","pause","loadedmetadata","volumechange","ended"].forEach(name => player.addEventListener(name, updatePlaybackControls));
 fullscreenButton.addEventListener("click", (event) => { event.stopPropagation(); toggleFullscreen(); });
 playerStage.addEventListener("click", (event) => {
-  if (event.target.closest(".player-overlay")) {
-    if (event.target.closest("button, input, select, label")) return;
+  // Taps on the video toggle playback; taps on the overlay background
+  // show/hide controls. Interactive controls keep their own click behavior.
+  if (event.target.closest("button, input, select, label")) return;
+  if (event.target === player || event.target.closest("video")) {
+    if (player.paused) player.play().catch(() => {});
+    else player.pause();
     revealOverlay();
     return;
   }
@@ -324,6 +328,7 @@ document.addEventListener("fullscreenchange", () => {
   fullscreenButton.textContent = fullscreen ? "⛶ Exit fullscreen" : "⛶ Fullscreen";
   revealOverlay();
   applyAspectRatio();
+  // Keep the ratio picker visible after entering fullscreen; it can still auto-hide after interaction.
 });
 window.addEventListener("resize", () => { if (!playerPanel.classList.contains("hidden")) applyAspectRatio(); });
 playerStage.addEventListener("pointermove", () => { if (document.fullscreenElement === playerStage) revealOverlay(); });
