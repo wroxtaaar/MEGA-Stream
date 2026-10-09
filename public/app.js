@@ -14,6 +14,11 @@ const aspectSelect = $("#aspect-ratio");
 const playerStage = $("#player-stage");
 const playerOverlay = $("#player-overlay");
 const fullscreenButton = $("#fullscreen-player");
+const playPauseButton = $("#play-pause");
+const seekControl = $("#player-seek");
+const timeLabel = $("#player-time");
+const volumeControl = $("#player-volume");
+let overlayHideTimer = null;
 let currentAspectRatio = "original";
 let videos = [];
 let folders = [];
@@ -190,45 +195,65 @@ function renderLibrary() {
   }
   grid.append(fragment);
 }
+function formatTime(seconds) {
+  if (!Number.isFinite(seconds)) return "0:00";
+  const s = Math.floor(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return h ? h + ":" + String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0") : m + ":" + String(sec).padStart(2, "0");
+}
 function applyAspectRatio() {
   currentAspectRatio = aspectSelect.value;
   const fullscreen = document.fullscreenElement === playerStage;
-  if (currentAspectRatio === "original") {
-    player.style.aspectRatio = "auto";
-    player.style.objectFit = "contain";
-    player.style.maxHeight = fullscreen ? "100vh" : "70vh";
-    player.style.width = fullscreen ? "100%" : "100%";
-    player.style.height = fullscreen ? "100%" : "auto";
-    playerStage.style.aspectRatio = "auto";
-    playerStage.style.removeProperty("--selected-ratio");
-    return;
-  }
   const ratios = { "16:9": 16 / 9, "4:3": 4 / 3, "21:9": 21 / 9 };
   const ratio = ratios[currentAspectRatio];
-  playerStage.style.aspectRatio = String(ratio);
-  playerStage.style.setProperty("--selected-ratio", String(ratio));
-  player.style.aspectRatio = String(ratio);
-  player.style.objectFit = "fill";
-  player.style.maxHeight = "none";
+  player.style.objectFit = currentAspectRatio === "original" ? "contain" : "fill";
   if (fullscreen) {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    const fittedWidth = Math.min(width, height * ratio);
-    const fittedHeight = fittedWidth / ratio;
-    player.style.width = fittedWidth + "px";
-    player.style.height = fittedHeight + "px";
-    player.style.margin = "auto";
-  } else {
+    playerStage.style.aspectRatio = "auto";
+    player.style.width = "100vw";
+    player.style.height = "100vh";
+    player.style.maxHeight = "100vh";
+    if (ratio) {
+      const fittedWidth = Math.min(window.innerWidth, window.innerHeight * ratio);
+      player.style.width = fittedWidth + "px";
+      player.style.height = (fittedWidth / ratio) + "px";
+    }
+  } else if (ratio) {
+    playerStage.style.aspectRatio = String(ratio);
     player.style.width = "100%";
     player.style.height = "100%";
-    player.style.margin = "0";
+    player.style.maxHeight = "none";
+  } else {
+    playerStage.style.aspectRatio = "16 / 9";
+    player.style.width = "100%";
+    player.style.height = "100%";
+    player.style.maxHeight = "70vh";
   }
+}
+function updatePlaybackControls() {
+  playPauseButton.textContent = player.paused ? "▶" : "Ⅱ";
+  playPauseButton.setAttribute("aria-label", player.paused ? "Play video" : "Pause video");
+  const duration = Number.isFinite(player.duration) ? player.duration : 0;
+  timeLabel.textContent = formatTime(player.currentTime) + " / " + formatTime(duration);
+  seekControl.value = duration ? String(Math.round(player.currentTime / duration * 1000)) : "0";
+}
+function revealOverlay() {
+  togglePlayerOverlay(true);
+  clearTimeout(overlayHideTimer);
+  if (!player.paused) overlayHideTimer = setTimeout(() => togglePlayerOverlay(false), 3500);
 }
 
 function togglePlayerOverlay(force) {
   const show = typeof force === "boolean" ? force : playerOverlay.classList.contains("is-hidden");
   playerOverlay.classList.toggle("is-hidden", !show);
+  playerStage.classList.toggle("controls-hidden", !show);
+  if (show && !player.paused) {
+    clearTimeout(overlayHideTimer);
+    overlayHideTimer = setTimeout(() => togglePlayerOverlay(false), 3500);
+  }
 }
+
 async function toggleFullscreen() {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
@@ -248,6 +273,7 @@ function playVideo(video) {
   togglePlayerOverlay(true);
   playerPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   player.play().catch(() => {});
+  updatePlaybackControls();
 }
 $("#refresh").addEventListener("click", () => loadLibrary(true));
 $("#close-player").addEventListener("click", () => {
@@ -261,10 +287,18 @@ backButton.addEventListener("click", () => {
   renderLibrary();
 });
 search.addEventListener("input", renderLibrary);
-aspectSelect.addEventListener("change", () => { applyAspectRatio(); togglePlayerOverlay(false); });
+aspectSelect.addEventListener("change", () => { applyAspectRatio(); revealOverlay(); });
+playPauseButton.addEventListener("click", (event) => { event.stopPropagation(); if (player.paused) player.play().catch(() => {}); else player.pause(); revealOverlay(); });
+seekControl.addEventListener("input", () => { if (Number.isFinite(player.duration) && player.duration > 0) player.currentTime = Number(seekControl.value) / 1000 * player.duration; revealOverlay(); });
+volumeControl.addEventListener("input", () => { player.volume = Number(volumeControl.value); player.muted = player.volume === 0; revealOverlay(); });
+["timeupdate","durationchange","play","pause","loadedmetadata","volumechange","ended"].forEach(name => player.addEventListener(name, updatePlaybackControls));
 fullscreenButton.addEventListener("click", (event) => { event.stopPropagation(); toggleFullscreen(); });
 playerStage.addEventListener("click", (event) => {
-  if (event.target.closest(".player-overlay")) return;
+  if (event.target.closest(".player-overlay")) {
+    if (event.target.closest("button, input, select, label")) return;
+    revealOverlay();
+    return;
+  }
   togglePlayerOverlay();
 });
 playerStage.addEventListener("dblclick", (event) => {
@@ -273,9 +307,10 @@ playerStage.addEventListener("dblclick", (event) => {
 document.addEventListener("fullscreenchange", () => {
   const fullscreen = document.fullscreenElement === playerStage;
   fullscreenButton.textContent = fullscreen ? "⛶ Exit fullscreen" : "⛶ Fullscreen";
-  togglePlayerOverlay(true);
+  revealOverlay();
   applyAspectRatio();
 });
 window.addEventListener("resize", () => { if (!playerPanel.classList.contains("hidden")) applyAspectRatio(); });
+playerStage.addEventListener("pointermove", () => { if (document.fullscreenElement === playerStage) revealOverlay(); });
 sortSelect.addEventListener("change", renderLibrary);
 checkStatus();
