@@ -231,9 +231,8 @@ function togglePlayerOverlay(force) {
 }
 async function toggleFullscreen() {
   try {
-    if (document.fullscreenElement === playerStage) await document.exitFullscreen();
+    if (document.fullscreenElement) await document.exitFullscreen();
     else if (playerStage.requestFullscreen) await playerStage.requestFullscreen();
-    else if (player.webkitEnterFullscreen) player.webkitEnterFullscreen();
   } catch (error) {
     showNotice("Fullscreen is unavailable in this browser.");
   }
@@ -265,10 +264,8 @@ search.addEventListener("input", renderLibrary);
 aspectSelect.addEventListener("change", () => { applyAspectRatio(); togglePlayerOverlay(false); });
 fullscreenButton.addEventListener("click", (event) => { event.stopPropagation(); toggleFullscreen(); });
 playerStage.addEventListener("click", (event) => {
-  if (event.target.closest(".player-overlay") || event.target.closest("video")) {
-    if (event.target.closest(".player-overlay")) return;
-    togglePlayerOverlay();
-  }
+  if (event.target.closest(".player-overlay")) return;
+  togglePlayerOverlay();
 });
 playerStage.addEventListener("dblclick", (event) => {
   if (!event.target.closest(".player-overlay")) toggleFullscreen();
