@@ -11,6 +11,9 @@ const breadcrumb = $("#breadcrumbs");
 const backButton = $("#back-folder");
 const sortSelect = $("#sort-by");
 const aspectSelect = $("#aspect-ratio");
+const playerStage = $("#player-stage");
+const playerOverlay = $("#player-overlay");
+const fullscreenButton = $("#fullscreen-player");
 let currentAspectRatio = "original";
 let videos = [];
 let folders = [];
@@ -194,17 +197,32 @@ function applyAspectRatio() {
     player.style.height = "auto";
     player.style.objectFit = "contain";
     player.style.maxHeight = "70vh";
+    playerStage.style.aspectRatio = "auto";
     return;
   }
   const ratios = { "16:9": 16 / 9, "4:3": 4 / 3, "21:9": 21 / 9 };
   const ratio = ratios[currentAspectRatio];
-  const availableWidth = Math.max(240, playerPanel.clientWidth - 36);
-  const height = Math.min(availableWidth / ratio, window.innerHeight * 0.7);
+  playerStage.style.aspectRatio = String(ratio);
   player.style.aspectRatio = String(ratio);
-  player.style.height = height + "px";
-  player.style.maxHeight = "70vh";
-  player.style.objectFit = "contain";
+  player.style.width = "100%";
+  player.style.height = "100%";
+  player.style.maxHeight = "none";
+  player.style.objectFit = "fill";
 }
+function togglePlayerOverlay(force) {
+  const show = typeof force === "boolean" ? force : playerOverlay.classList.contains("is-hidden");
+  playerOverlay.classList.toggle("is-hidden", !show);
+}
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement === playerStage) await document.exitFullscreen();
+    else if (playerStage.requestFullscreen) await playerStage.requestFullscreen();
+    else if (player.webkitEnterFullscreen) player.webkitEnterFullscreen();
+  } catch (error) {
+    showNotice("Fullscreen is unavailable in this browser.");
+  }
+}
+
 function playVideo(video) {
   playerPanel.classList.remove("hidden");
   nowPlaying.textContent = video.name;
@@ -212,6 +230,7 @@ function playVideo(video) {
   player.src = "/api/stream/" + encodeURIComponent(video.id);
   player.load();
   applyAspectRatio();
+  togglePlayerOverlay(true);
   playerPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   player.play().catch(() => {});
 }
@@ -228,6 +247,22 @@ backButton.addEventListener("click", () => {
 });
 search.addEventListener("input", renderLibrary);
 aspectSelect.addEventListener("change", applyAspectRatio);
+fullscreenButton.addEventListener("click", (event) => { event.stopPropagation(); toggleFullscreen(); });
+playerStage.addEventListener("click", (event) => {
+  if (event.target.closest(".player-overlay") || event.target.closest("video")) {
+    if (event.target.closest(".player-overlay")) return;
+    togglePlayerOverlay();
+  }
+});
+playerStage.addEventListener("dblclick", (event) => {
+  if (!event.target.closest(".player-overlay")) toggleFullscreen();
+});
+document.addEventListener("fullscreenchange", () => {
+  const fullscreen = document.fullscreenElement === playerStage;
+  fullscreenButton.textContent = fullscreen ? "⛶ Exit fullscreen" : "⛶ Fullscreen";
+  togglePlayerOverlay(true);
+  applyAspectRatio();
+});
 window.addEventListener("resize", () => { if (!playerPanel.classList.contains("hidden")) applyAspectRatio(); });
 sortSelect.addEventListener("change", renderLibrary);
 checkStatus();
