@@ -4,7 +4,8 @@ A browser-based MEGA video library hosted on your Oracle VPS. Open the website i
 
 ## MVP features
 
-- One MEGA account, with credentials kept on the server.
+- Up to two MEGA accounts, with credentials kept on the server.
+- Combined library with an account filter to browse either account or both.
 - Public, no-login website for experimentation.
 - Recursive video catalogue and search.
 - Mobile-friendly browser player.
@@ -40,7 +41,7 @@ cp .env.example .env
 nano .env
 ```
 
-Set `MEGA_EMAIL`, `MEGA_PASSWORD`, and `MEGA_TFA_CODE` only if your account requires a current two-factor code. Never commit `.env` or put MEGA credentials in browser code.
+Set `MEGA_EMAIL` and `MEGA_PASSWORD` for your first account. To connect a second account, also set `MEGA2_EMAIL` and `MEGA2_PASSWORD`. Set `MEGA_TFA_CODE` and/or `MEGA2_TFA_CODE` only if the corresponding account requires a current two-factor code. Never commit `.env` or put MEGA credentials in browser code. If one account fails to connect, the other connected account can still be used.
 
 3. Start or rebuild the website:
 
@@ -66,7 +67,8 @@ Health endpoint: `GET /healthz` at `http://YOUR_VPS_PUBLIC_IP:8080/healthz`.
 - `GET /api/status` — service status.
 - `GET /api/videos` — list videos.
 - `GET /api/videos?refresh=1` — force library refresh.
-- `GET /api/account` — account quota information where available.
+- `GET /api/accounts` — connected account names and video counts.
+- `GET /api/account` — quota information for connected accounts where available.
 - `GET /api/stream/:id` — video stream with Range support.
 - `HEAD /api/stream/:id` — video metadata.
 
