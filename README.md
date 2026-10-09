@@ -1,75 +1,73 @@
 # MEGA Stream
 
-A personal MEGA-backed video library that runs on your VPS. It indexes video files from one MEGA account and streams selected files through the VPS to a browser video player.
+A browser-based MEGA video library hosted on your Oracle VPS. Open the website in Chrome on a phone, PC, or compatible TV browser. No Android app, phone-side Tailscale, or app password is required for this experimental setup.
 
 ## MVP features
 
 - One MEGA account, with credentials kept on the server.
+- Public, no-login website for experimentation.
 - Recursive video catalogue and search.
 - Mobile-friendly browser player.
 - HTTP byte-range streaming for seeking.
-- App-password login with HTTP-only session cookies.
 - No full-video download to the VPS is required by the app.
 - Docker Compose deployment.
 
 MEGAJS documents logged-in storage, file metadata, chunked downloads and start/end download options: https://mega.js.org/docs/1.0/api
 
-## Important limitations
+## Important notes
 
+- **Anyone who can reach the URL can browse and stream the indexed video library.** This is intentional for your current experiment; do not put private files in this MEGA account while the site is public.
+- The temporary setup uses HTTP on port 8080. Add a domain and HTTPS later before treating it as a long-term service.
 - This is an initial personal-use implementation, not a production CDN.
 - Browser playback depends on codecs. MP4 with H.264/AAC is broadly compatible; MKV/HEVC may not play in some browsers.
 - MEGA transfer quotas and service limits still apply; no speed or quota is guaranteed.
-- Test login, byte-range seeking and long playback with your account before relying on it.
-- The initial session store is in-memory; restarts invalidate sessions.
-- Docker binds port 8080 to localhost by default. Do not expose the app directly to the public internet; use Tailscale or a trusted HTTPS reverse proxy.
+- Test MEGA connection, byte-range seeking and long playback with your account.
 - Use only files you are entitled to access and follow MEGA's current terms.
 
 ## Deploy on Oracle VPS
 
-1. Clone the repo or update an existing checkout.
+1. Clone the repository or update your existing checkout:
 
 ```bash
 git clone https://github.com/wroxtaaar/MEGA-Stream.git
 cd MEGA-Stream
 ```
 
-2. Configure secrets:
+2. Configure the MEGA credentials on the VPS only:
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Set `MEGA_EMAIL`, `MEGA_PASSWORD`, optional `MEGA_TFA_CODE`, `APP_PASSWORD`, and `SESSION_SECRET`. Generate a secret with `openssl rand -hex 32`. Never commit `.env` or put MEGA credentials in browser code.
+Set `MEGA_EMAIL`, `MEGA_PASSWORD`, and `MEGA_TFA_CODE` only if your account requires a current two-factor code. Never commit `.env` or put MEGA credentials in browser code.
 
-3. Start:
+3. Start or rebuild the website:
 
 ```bash
 docker compose up -d --build
 docker compose logs -f mega-stream
 ```
 
-4. For private access over your tailnet, run on the VPS:
+4. Allow inbound TCP port 8080 in the VPS cloud/network firewall and host firewall, if enabled. Then open:
 
-```bash
-tailscale serve --bg http://127.0.0.1:8080
+```
+http://YOUR_VPS_PUBLIC_IP:8080
 ```
 
-Use the HTTPS URL Tailscale reports. Alternatively, configure a trusted HTTPS reverse proxy. Do not open port 8080 publicly.
+This temporary public HTTP setup intentionally has no login. Anyone with network access to that URL can browse and stream the catalogue. We'll add a domain and HTTPS later.
 
 5. Confirm videos load, seek to the middle and end, and check browser requests for `206 Partial Content` and `Content-Range`.
 
-Health endpoint: `GET /healthz` (available locally on the VPS at `http://127.0.0.1:8080/healthz`).
+Health endpoint: `GET /healthz` at `http://YOUR_VPS_PUBLIC_IP:8080/healthz`.
 
 ## API
 
-- `GET /api/status` — status.
-- `POST /api/login` — app password login.
-- `POST /api/logout` — end session.
+- `GET /api/status` — service status.
 - `GET /api/videos` — list videos.
 - `GET /api/videos?refresh=1` — force library refresh.
 - `GET /api/account` — account quota information where available.
 - `GET /api/stream/:id` — video stream with Range support.
 - `HEAD /api/stream/:id` — video metadata.
 
-All library and stream endpoints require an authenticated app session.
+There is no app login in this experimental configuration.
