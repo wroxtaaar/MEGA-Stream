@@ -1,31 +1,18 @@
 require("dotenv").config();
 
-const crypto = require("node:crypto");
 const path = require("node:path");
 const express = require("express");
-const session = require("express-session");
-const rateLimit = require("express-rate-limit");
 const { Storage } = require("megajs");
 
 const app = express();
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
-const APP_PASSWORD = process.env.APP_PASSWORD;
-const SESSION_SECRET = process.env.SESSION_SECRET;
 const REFRESH_MS = Math.max(60, Number(process.env.CATALOG_REFRESH_SECONDS || 300)) * 1000;
 const VIDEO_EXTENSIONS = new Set([
   ".mp4", ".m4v", ".mkv", ".webm", ".mov", ".avi", ".mpg", ".mpeg",
   ".m2ts", ".ts", ".wmv", ".ogv", ".3gp"
 ]);
 
-if (!APP_PASSWORD || APP_PASSWORD === "replace-this-with-a-long-password") {
-  console.error("Set a unique APP_PASSWORD in .env before starting.");
-  process.exit(1);
-}
-if (!SESSION_SECRET || SESSION_SECRET === "replace-this-with-a-long-random-secret") {
-  console.error("Set a unique SESSION_SECRET in .env before starting.");
-  process.exit(1);
-}
 if (!process.env.MEGA_EMAIL || !process.env.MEGA_PASSWORD) {
   console.error("Set MEGA_EMAIL and MEGA_PASSWORD in .env.");
   process.exit(1);
@@ -34,27 +21,7 @@ if (!process.env.MEGA_EMAIL || !process.env.MEGA_PASSWORD) {
 if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 app.disable("x-powered-by");
 app.use(express.json({ limit: "16kb" }));
-app.use(session({
-  name: "mega_stream_session",
-  secret: SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    sameSite: "strict",
-    secure: process.env.TRUST_PROXY === "1",
-    maxAge: 12 * 60 * 60 * 1000
-  }
-}));
 app.use(express.static(path.join(__dirname, "public"), { index: false }));
-
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
-  message: { error: "Too many login attempts. Try again later." }
-});
 
 let storage = null;
 let storageReady = false;
@@ -62,17 +29,6 @@ let storageError = null;
 let catalog = [];
 let lastCatalogRefresh = 0;
 let refreshInFlight = null;
-
-function requireLogin(req, res, next) {
-  if (req.session && req.session.authenticated === true) return next();
-  return res.status(401).json({ error: "Please sign in to your personal MEGA library." });
-}
-
-function safeEqual(a, b) {
-  const left = Buffer.from(String(a));
-  const right = Buffer.from(String(b));
-  return left.length === right.length && crypto.timingSafeEqual(left, right);
-}
 
 function videoMime(name) {
   const ext = path.extname(name).toLowerCase();
@@ -174,7 +130,6 @@ app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.ht
 
 app.get("/api/status", (req, res) => {
   res.json({
-    authenticated: req.session?.authenticated === true,
     megaConnected: storageReady,
     videoCount: catalog.length,
     lastIndexedAt: lastCatalogRefresh || null,
@@ -182,29 +137,7 @@ app.get("/api/status", (req, res) => {
   });
 });
 
-app.post("/api/login", loginLimiter, (req, res) => {
-  const password = req.body && req.body.password;
-  if (typeof password !== "string" || !safeEqual(password, APP_PASSWORD)) {
-    return res.status(401).json({ error: "Incorrect password." });
-  }
-  req.session.regenerate((err) => {
-    if (err) return res.status(500).json({ error: "Could not create a session." });
-    req.session.authenticated = true;
-    return req.session.save((saveErr) => {
-      if (saveErr) return res.status(500).json({ error: "Could not save session." });
-      res.json({ ok: true });
-    });
-  });
-});
-
-app.post("/api/logout", requireLogin, (req, res) => {
-  req.session.destroy(() => {
-    res.clearCookie("mega_stream_session", { httpOnly: true, sameSite: "strict" });
-    res.json({ ok: true });
-  });
-});
-
-app.get("/api/videos", requireLogin, async (req, res) => {
+app.get("/api/videos", async (req, res) => {
   try {
     const force = req.query.refresh === "1";
     const files = await refreshCatalog(force);
@@ -216,7 +149,7 @@ app.get("/api/videos", requireLogin, async (req, res) => {
   }
 });
 
-app.get("/api/account", requireLogin, async (req, res) => {
+app.get("/api/account", async (req, res) => {
   try {
     if (!storageReady || !storage) return res.status(503).json({ error: "MEGA is not connected." });
     const info = await storage.getAccountInfo();
@@ -233,7 +166,7 @@ app.get("/api/account", requireLogin, async (req, res) => {
   }
 });
 
-app.head("/api/stream/:id", requireLogin, async (req, res) => {
+app.head("/api/stream/:id", async (req, res) => {
   try {
     const files = await refreshCatalog();
     const item = files.find((entry) => entry.id === req.params.id);
@@ -252,7 +185,7 @@ app.head("/api/stream/:id", requireLogin, async (req, res) => {
   }
 });
 
-app.get("/api/stream/:id", requireLogin, async (req, res) => {
+app.get("/api/stream/:id", async (req, res) => {
   let upstream;
   try {
     const files = await refreshCatalog();
