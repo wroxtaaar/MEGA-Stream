@@ -10,16 +10,10 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/" aria-label="MEGA Stream home"><span class="brand-icon">M</span><span>MEGA<span class="muted"> Stream</span></span></a>
-    <div class="top-actions"><span id="connection" class="connection"><i></i> Checking connection</span><button id="logout" class="button ghost hidden" type="button">Sign out</button></div>
+    <div class="top-actions"><span id="connection" class="connection"><i></i> Checking connection</span></div>
   </header>
   <main class="shell">
-    <section id="login-panel" class="login-panel hidden">
-      <div class="eyebrow">PERSONAL MEDIA LIBRARY</div><h1>Your videos, in one place.</h1>
-      <p class="muted">Sign in to access the MEGA account connected on your VPS.</p>
-      <form id="login-form"><label for="password">App password</label><input id="password" type="password" autocomplete="current-password" required placeholder="Enter your app password"><button class="button primary full" type="submit">Unlock library</button><p id="login-error" class="error" role="alert"></p></form>
-      <p class="fine-print">Your MEGA password is kept on the server and is never sent to this page.</p>
-    </section>
-    <section id="library" class="hidden">
+    <section id="library">
       <div class="hero"><div><div class="eyebrow">YOUR PERSONAL LIBRARY</div><h1>Pick up where you left off.</h1><p class="muted">Videos stream from MEGA through your VPS. Seek and resume in the player.</p></div><button id="refresh" class="button ghost" type="button">↻ Refresh</button></div>
       <section id="player-panel" class="player-panel hidden"><div class="player-heading"><div><div class="eyebrow">NOW PLAYING</div><h2 id="now-playing">Choose a video</h2></div><button id="close-player" class="button ghost" type="button">Close player</button></div><video id="player" controls playsinline preload="metadata"></video><p id="player-note" class="muted small">If a format is unsupported by your browser, try another video encoded as H.264/AAC in MP4.</p></section>
       <div class="library-toolbar"><div><h2>All videos</h2><p id="library-summary" class="muted small">Loading your library…</p></div><input id="search" type="search" placeholder="Search videos…" aria-label="Search videos"></div>
