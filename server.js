@@ -27,6 +27,7 @@ let storage = null;
 let storageReady = false;
 let storageError = null;
 let catalog = [];
+let folderCatalog = [];
 let lastCatalogRefresh = 0;
 let refreshInFlight = null;
 
@@ -62,10 +63,28 @@ function walkFiles(folder, parent = "") {
       id: String(item.nodeId),
       name: item.name || "Untitled video",
       path: relativePath,
+      folderPath: parent,
       size: Number(item.size || 0),
       mime: videoMime(item.name || ""),
       modifiedAt: item.timestamp ? Number(item.timestamp) * 1000 : null
     });
+  }
+  return output;
+}
+
+
+function walkFolders(folder, parent = "") {
+  const output = [];
+  for (const item of (folder && Array.isArray(folder.children) ? folder.children : [])) {
+    if (!item.directory) continue;
+    const folderPath = parent ? parent + "/" + item.name : item.name;
+    output.push({
+      id: String(item.nodeId || folderPath),
+      name: item.name || "Untitled folder",
+      path: folderPath,
+      parentPath: parent
+    });
+    output.push(...walkFolders(item, folderPath));
   }
   return output;
 }
@@ -93,6 +112,7 @@ async function refreshCatalog(force = false) {
   refreshInFlight = (async () => {
     await storage.reload();
     catalog = walkFiles(storage.root).sort((a, b) => a.name.localeCompare(b.name));
+    folderCatalog = walkFolders(storage.root).sort((a, b) => a.name.localeCompare(b.name));
     lastCatalogRefresh = Date.now();
     console.log("Indexed " + catalog.length + " video files from MEGA.");
     return catalog;
@@ -146,6 +166,19 @@ app.get("/api/videos", async (req, res) => {
   } catch (err) {
     console.error("Catalogue error:", err.message);
     res.status(503).json({ error: "Could not load the MEGA video library. Check the server logs." });
+  }
+});
+
+
+app.get("/api/folders", async (req, res) => {
+  try {
+    const force = req.query.refresh === "1";
+    await refreshCatalog(force);
+    res.set("Cache-Control", "no-store");
+    res.json({ folders: folderCatalog, count: folderCatalog.length });
+  } catch (err) {
+    console.error("Folder catalogue error:", err.message);
+    res.status(503).json({ error: "Could not load MEGA folders. Check the server logs." });
   }
 });
 
