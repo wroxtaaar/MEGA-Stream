@@ -13,8 +13,16 @@ const VIDEO_EXTENSIONS = new Set([
   ".m2ts", ".ts", ".wmv", ".ogv", ".3gp"
 ]);
 
-if (!process.env.MEGA_EMAIL || !process.env.MEGA_PASSWORD) {
-  console.error("Set MEGA_EMAIL and MEGA_PASSWORD in .env.");
+const accountConfigs = [
+  { id: "account1", label: "MEGA Account 1", email: process.env.MEGA_EMAIL, password: process.env.MEGA_PASSWORD, tfa: process.env.MEGA_TFA_CODE },
+  { id: "account2", label: "MEGA Account 2", email: process.env.MEGA2_EMAIL, password: process.env.MEGA2_PASSWORD, tfa: process.env.MEGA2_TFA_CODE }
+].filter((account) => account.email && account.password);
+if (!accountConfigs.length) {
+  console.error("Set MEGA_EMAIL and MEGA_PASSWORD in .env (and optionally MEGA2_EMAIL/MEGA2_PASSWORD).");
+  process.exit(1);
+}
+if ((process.env.MEGA2_EMAIL && !process.env.MEGA2_PASSWORD) || (!process.env.MEGA2_EMAIL && process.env.MEGA2_PASSWORD)) {
+  console.error("Configure both MEGA2_EMAIL and MEGA2_PASSWORD, or leave both empty.");
   process.exit(1);
 }
 
@@ -23,7 +31,7 @@ app.disable("x-powered-by");
 app.use(express.json({ limit: "16kb" }));
 app.use(express.static(path.join(__dirname, "public"), { index: false }));
 
-let storage = null;
+const accounts = accountConfigs.map((config) => ({ ...config, storage: null, ready: false, error: null, catalog: [], folders: [] }));
 let storageReady = false;
 let storageError = null;
 let catalog = [];
@@ -50,17 +58,20 @@ function videoMime(name) {
   })[ext] || "application/octet-stream";
 }
 
-function walkFiles(folder, parent = "") {
+function walkFiles(folder, account, parent = "") {
   const output = [];
   for (const item of (folder && Array.isArray(folder.children) ? folder.children : [])) {
     const relativePath = parent ? parent + "/" + item.name : item.name;
     if (item.directory) {
-      output.push(...walkFiles(item, relativePath));
+      output.push(...walkFiles(item, account, relativePath));
       continue;
     }
     if (!item.nodeId || !VIDEO_EXTENSIONS.has(path.extname(item.name || "").toLowerCase())) continue;
     output.push({
-      id: String(item.nodeId),
+      id: account.id + ":" + String(item.nodeId),
+      nodeId: String(item.nodeId),
+      accountId: account.id,
+      accountName: account.label,
       name: item.name || "Untitled video",
       path: relativePath,
       folderPath: parent,
@@ -73,48 +84,73 @@ function walkFiles(folder, parent = "") {
 }
 
 
-function walkFolders(folder, parent = "") {
+function walkFolders(folder, account, parent = "") {
   const output = [];
   for (const item of (folder && Array.isArray(folder.children) ? folder.children : [])) {
     if (!item.directory) continue;
     const folderPath = parent ? parent + "/" + item.name : item.name;
     output.push({
-      id: String(item.nodeId || folderPath),
+      id: account.id + ":" + String(item.nodeId || folderPath),
+      accountId: account.id,
+      accountName: account.label,
       name: item.name || "Untitled folder",
       path: folderPath,
       parentPath: parent
     });
-    output.push(...walkFolders(item, folderPath));
+    output.push(...walkFolders(item, account, folderPath));
   }
   return output;
 }
 
+async function connectOneAccount(account) {
+  console.log("Connecting to " + account.label + "...");
+  try {
+    const storage = new Storage({
+      email: account.email,
+      password: account.password,
+      ...(account.tfa ? { secondFactorCode: account.tfa } : {}),
+      autoload: true,
+      keepalive: true
+    });
+    account.storage = storage;
+    await storage.ready;
+    account.ready = true;
+    account.error = null;
+    console.log(account.label + " connected. Account tree loaded.");
+  } catch (error) {
+    account.ready = false;
+    account.error = error;
+    console.error(account.label + " connection failed:", error.message);
+  }
+}
+
 async function connectMega() {
-  console.log("Connecting to MEGA...");
-  storage = new Storage({
-    email: process.env.MEGA_EMAIL,
-    password: process.env.MEGA_PASSWORD,
-    ...(process.env.MEGA_TFA_CODE ? { secondFactorCode: process.env.MEGA_TFA_CODE } : {}),
-    autoload: true,
-    keepalive: true
-  });
-  await storage.ready;
-  storageReady = true;
-  storageError = null;
-  console.log("MEGA connected. Account tree loaded.");
-  await refreshCatalog(true);
+  await Promise.all(accounts.map(connectOneAccount));
+  storageReady = accounts.some((account) => account.ready);
+  storageError = storageReady ? null : new Error("No MEGA accounts connected.");
+  if (storageReady) await refreshCatalog(true);
 }
 
 async function refreshCatalog(force = false) {
-  if (!storageReady || !storage || !storage.root) throw new Error("MEGA is not connected.");
+  storageReady = accounts.some((account) => account.ready);
+  if (!storageReady) throw new Error("No MEGA account is connected.");
   if (!force && Date.now() - lastCatalogRefresh < REFRESH_MS) return catalog;
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
-    await storage.reload();
-    catalog = walkFiles(storage.root).sort((a, b) => a.name.localeCompare(b.name));
-    folderCatalog = walkFolders(storage.root).sort((a, b) => a.name.localeCompare(b.name));
+    await Promise.all(accounts.filter((account) => account.ready && account.storage).map(async (account) => {
+      try {
+        await account.storage.reload();
+        account.catalog = walkFiles(account.storage.root, account).sort((a, b) => a.name.localeCompare(b.name));
+        account.folders = walkFolders(account.storage.root, account).sort((a, b) => a.name.localeCompare(b.name));
+      } catch (error) {
+        account.error = error;
+        console.error("Refresh failed for " + account.label + ":", error.message);
+      }
+    }));
+    catalog = accounts.flatMap((account) => account.catalog).sort((a, b) => a.name.localeCompare(b.name));
+    folderCatalog = accounts.flatMap((account) => account.folders).sort((a, b) => a.name.localeCompare(b.name));
     lastCatalogRefresh = Date.now();
-    console.log("Indexed " + catalog.length + " video files from MEGA.");
+    console.log("Indexed " + catalog.length + " video files across " + accounts.filter((account) => account.ready).length + " connected MEGA account(s).");
     return catalog;
   })();
   try {
@@ -153,8 +189,14 @@ app.get("/api/status", (req, res) => {
     megaConnected: storageReady,
     videoCount: catalog.length,
     lastIndexedAt: lastCatalogRefresh || null,
-    error: storageError ? "MEGA connection needs attention." : null
+    accounts: accounts.map((account) => ({ id: account.id, name: account.label, connected: account.ready, videoCount: account.catalog.length })),
+    error: storageError ? "MEGA connection needs attention." : accounts.some((account) => account.error) ? "One MEGA account could not connect; other connected accounts remain available." : null
   });
+});
+
+app.get("/api/accounts", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json({ accounts: accounts.map((account) => ({ id: account.id, name: account.label, connected: account.ready, videoCount: account.catalog.length })) });
 });
 
 app.get("/api/videos", async (req, res) => {
@@ -185,14 +227,18 @@ app.get("/api/folders", async (req, res) => {
 app.get("/api/account", async (req, res) => {
   try {
     if (!storageReady || !storage) return res.status(503).json({ error: "MEGA is not connected." });
-    const info = await storage.getAccountInfo();
-    res.json({
-      name: storage.name || "MEGA account",
-      spaceUsed: Number(info.spaceUsed || 0),
-      spaceTotal: Number(info.spaceTotal || 0),
-      downloadBandwidthUsed: Number(info.downloadBandwidthUsed || 0),
-      downloadBandwidthTotal: Number(info.downloadBandwidthTotal || 0)
-    });
+    const results = await Promise.all(accounts.filter((account) => account.ready && account.storage).map(async (account) => {
+      const info = await account.storage.getAccountInfo();
+      return {
+        id: account.id,
+        name: account.label,
+        spaceUsed: Number(info.spaceUsed || 0),
+        spaceTotal: Number(info.spaceTotal || 0),
+        downloadBandwidthUsed: Number(info.downloadBandwidthUsed || 0),
+        downloadBandwidthTotal: Number(info.downloadBandwidthTotal || 0)
+      };
+    }));
+    res.json({ accounts: results });
   } catch (err) {
     console.error("MEGA account info error:", err.message);
     res.status(503).json({ error: "MEGA account information is temporarily unavailable." });
@@ -248,7 +294,8 @@ app.get("/api/stream/:id", async (req, res) => {
     });
     if (range) res.set("Content-Range", "bytes " + start + "-" + end + "/" + item.size);
 
-    const file = storage.files[item.id];
+    const account = accounts.find((entry) => entry.id === item.accountId && entry.ready && entry.storage);
+    const file = account && account.storage.files[item.nodeId];
     if (!file) {
       res.status(404).end();
       return;
@@ -286,7 +333,9 @@ connectMega().catch((err) => {
 async function shutdown() {
   console.log("Shutting down...");
   server.close();
-  try { if (storage && typeof storage.close === "function") await storage.close(); } catch {}
+  for (const account of accounts) {
+    try { if (account.storage && typeof account.storage.close === "function") await account.storage.close(); } catch {}
+  }
   process.exit(0);
 }
 process.on("SIGINT", shutdown);
