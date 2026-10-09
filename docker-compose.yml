@@ -1,0 +1,10 @@
+services:
+  mega-stream:
+    build: .
+    container_name: mega-stream
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    # For public access, put behind HTTPS and a trusted reverse proxy.
