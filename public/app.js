@@ -208,27 +208,41 @@ function applyAspectRatio() {
   const fullscreen = document.fullscreenElement === playerStage || document.fullscreenElement === player;
   const ratios = { "16:9": 16 / 9, "16:10": 16 / 10, "4:3": 4 / 3, "21:9": 21 / 9 };
   const ratio = ratios[currentAspectRatio];
-  player.style.objectFit = currentAspectRatio === "original" ? "contain" : "fill";
+  // Never stretch the encoded picture. Size the video box to the chosen ratio,
+  // then use contain so the actual video keeps its own proportions.
+  player.style.objectFit = "contain";
+  player.style.margin = "auto";
   if (fullscreen) {
     playerStage.style.aspectRatio = "auto";
-    player.style.width = "100vw";
-    player.style.height = "100vh";
-    player.style.maxHeight = "100vh";
+    playerStage.style.display = "flex";
+    playerStage.style.alignItems = "center";
+    playerStage.style.justifyContent = "center";
     if (ratio) {
       const fittedWidth = Math.min(window.innerWidth, window.innerHeight * ratio);
-      player.style.width = fittedWidth + "px";
-      player.style.height = (fittedWidth / ratio) + "px";
+      const fittedHeight = Math.min(window.innerHeight, window.innerWidth / ratio);
+      const width = Math.min(fittedWidth, fittedHeight * ratio);
+      player.style.width = width + "px";
+      player.style.height = (width / ratio) + "px";
+      player.style.maxWidth = "100vw";
+      player.style.maxHeight = "100vh";
+    } else {
+      player.style.width = "100%";
+      player.style.height = "100%";
+      player.style.maxWidth = "100vw";
+      player.style.maxHeight = "100vh";
     }
   } else if (ratio) {
     playerStage.style.aspectRatio = String(ratio);
     player.style.width = "100%";
     player.style.height = "100%";
     player.style.maxHeight = "none";
+    player.style.maxWidth = "none";
   } else {
     playerStage.style.aspectRatio = "16 / 9";
     player.style.width = "100%";
     player.style.height = "100%";
     player.style.maxHeight = "70vh";
+    player.style.maxWidth = "100%";
   }
 }
 function updatePlaybackControls() {
