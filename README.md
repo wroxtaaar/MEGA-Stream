@@ -21,7 +21,7 @@ MEGAJS documents logged-in storage, file metadata, chunked downloads and start/e
 - MEGA transfer quotas and service limits still apply; no speed or quota is guaranteed.
 - Test login, byte-range seeking and long playback with your account before relying on it.
 - The initial session store is in-memory; restarts invalidate sessions.
-- Do not expose port 8080 directly to the public internet. Prefer Tailscale or a trusted HTTPS reverse proxy with a strong app password.
+- Docker binds port 8080 to localhost by default. Do not expose the app directly to the public internet; use Tailscale or a trusted HTTPS reverse proxy.
 - Use only files you are entitled to access and follow MEGA's current terms.
 
 ## Deploy on Oracle VPS
@@ -49,9 +49,17 @@ docker compose up -d --build
 docker compose logs -f mega-stream
 ```
 
-4. Test on a trusted/private network. Confirm videos load, seek to the middle and end, and check browser requests for `206 Partial Content` and `Content-Range`.
+4. For private access over your tailnet, run on the VPS:
 
-Health endpoint: `GET /healthz`.
+```bash
+tailscale serve --bg http://127.0.0.1:8080
+```
+
+Use the HTTPS URL Tailscale reports. Alternatively, configure a trusted HTTPS reverse proxy. Do not open port 8080 publicly.
+
+5. Confirm videos load, seek to the middle and end, and check browser requests for `206 Partial Content` and `Content-Range`.
+
+Health endpoint: `GET /healthz` (available locally on the VPS at `http://127.0.0.1:8080/healthz`).
 
 ## API
 
