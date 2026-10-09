@@ -1,8 +1,5 @@
 const $ = (selector) => document.querySelector(selector);
-const loginPanel = $("#login-panel");
 const library = $("#library");
-const loginForm = $("#login-form");
-const loginError = $("#login-error");
 const connection = $("#connection");
 const grid = $("#video-grid");
 const summary = $("#library-summary");
@@ -31,28 +28,13 @@ async function api(url, options = {}) {
   const response = await fetch(url, { credentials: "same-origin", ...options });
   const data = response.status === 204 ? {} : await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 401 && !url.endsWith("/api/login")) showLogin();
     throw new Error(data.error || "Request failed (" + response.status + ")");
   }
   return data;
 }
-function showLogin() {
-  library.classList.add("hidden");
-  loginPanel.classList.remove("hidden");
-  $("#logout").classList.add("hidden");
-  connection.classList.remove("ok");
-  connection.lastChild.textContent = " Sign in required";
-}
-function showLibrary() {
-  loginPanel.classList.add("hidden");
-  library.classList.remove("hidden");
-  $("#logout").classList.remove("hidden");
-}
 async function checkStatus() {
   try {
     const status = await api("/api/status");
-    if (!status.authenticated) { showLogin(); return; }
-    showLibrary();
     connection.classList.toggle("ok", status.megaConnected);
     connection.lastChild.textContent = status.megaConnected ? " MEGA connected" : " MEGA reconnect needed";
     if (status.error) showNotice(status.error);
@@ -60,7 +42,6 @@ async function checkStatus() {
   } catch (error) {
     connection.lastChild.textContent = " Service unavailable";
     showNotice(error.message);
-    showLogin();
   }
 }
 async function loadVideos(force = false) {
@@ -132,36 +113,8 @@ function playVideo(video) {
   playerPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   player.play().catch(() => {});
 }
-loginForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  loginError.textContent = "";
-  const button = loginForm.querySelector("button");
-  button.disabled = true;
-  button.textContent = "Unlocking…";
-  try {
-    await api("/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: $("#password").value })
-    });
-    $("#password").value = "";
-    await checkStatus();
-  } catch (error) {
-    loginError.textContent = error.message;
-  } finally {
-    button.disabled = false;
-    button.textContent = "Unlock library";
-  }
-});
 $("#refresh").addEventListener("click", () => loadVideos(true));
-$("#logout").addEventListener("click", async () => {
-  player.pause();
-  player.removeAttribute("src");
-  player.load();
-  try { await api("/api/logout", { method: "POST" }); } catch {}
-  showLogin();
-});
-$("#close-player").addEventListener("click", () => {
+$($("#close-player").addEventListener("click", () => {
   player.pause();
   player.removeAttribute("src");
   player.load();
