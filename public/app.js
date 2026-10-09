@@ -10,6 +10,8 @@ const nowPlaying = $("#now-playing");
 const breadcrumb = $("#breadcrumbs");
 const backButton = $("#back-folder");
 const sortSelect = $("#sort-by");
+const aspectSelect = $("#aspect-ratio");
+let currentAspectRatio = "original";
 let videos = [];
 let folders = [];
 let currentFolder = "";
@@ -185,12 +187,31 @@ function renderLibrary() {
   }
   grid.append(fragment);
 }
+function applyAspectRatio() {
+  currentAspectRatio = aspectSelect.value;
+  if (currentAspectRatio === "original") {
+    player.style.aspectRatio = "auto";
+    player.style.height = "auto";
+    player.style.objectFit = "contain";
+    player.style.maxHeight = "70vh";
+    return;
+  }
+  const ratios = { "16:9": 16 / 9, "4:3": 4 / 3, "21:9": 21 / 9 };
+  const ratio = ratios[currentAspectRatio];
+  const availableWidth = Math.max(240, playerPanel.clientWidth - 36);
+  const height = Math.min(availableWidth / ratio, window.innerHeight * 0.7);
+  player.style.aspectRatio = String(ratio);
+  player.style.height = height + "px";
+  player.style.maxHeight = "70vh";
+  player.style.objectFit = "contain";
+}
 function playVideo(video) {
   playerPanel.classList.remove("hidden");
   nowPlaying.textContent = video.name;
   player.pause();
   player.src = "/api/stream/" + encodeURIComponent(video.id);
   player.load();
+  applyAspectRatio();
   playerPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   player.play().catch(() => {});
 }
@@ -206,5 +227,7 @@ backButton.addEventListener("click", () => {
   renderLibrary();
 });
 search.addEventListener("input", renderLibrary);
+aspectSelect.addEventListener("change", applyAspectRatio);
+window.addEventListener("resize", () => { if (!playerPanel.classList.contains("hidden")) applyAspectRatio(); });
 sortSelect.addEventListener("change", renderLibrary);
 checkStatus();
