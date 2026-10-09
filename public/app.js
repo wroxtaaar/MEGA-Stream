@@ -206,7 +206,7 @@ function formatTime(seconds) {
 function applyAspectRatio() {
   currentAspectRatio = aspectSelect.value;
   const fullscreen = document.fullscreenElement === playerStage;
-  const ratios = { "16:9": 16 / 9, "4:3": 4 / 3, "21:9": 21 / 9 };
+  const ratios = { "16:9": 16 / 9, "16:10": 16 / 10, "4:3": 4 / 3, "21:9": 21 / 9 };
   const ratio = ratios[currentAspectRatio];
   player.style.objectFit = currentAspectRatio === "original" ? "contain" : "fill";
   if (fullscreen) {
