@@ -226,7 +226,7 @@ app.get("/api/folders", async (req, res) => {
 
 app.get("/api/account", async (req, res) => {
   try {
-    if (!storageReady || !storage) return res.status(503).json({ error: "MEGA is not connected." });
+    if (!storageReady || !accounts.some((account) => account.ready && account.storage)) return res.status(503).json({ error: "MEGA is not connected." });
     const results = await Promise.all(accounts.filter((account) => account.ready && account.storage).map(async (account) => {
       const info = await account.storage.getAccountInfo();
       return {
