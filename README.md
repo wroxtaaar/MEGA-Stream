@@ -71,3 +71,5 @@ Health endpoint: `GET /healthz` at `http://YOUR_VPS_PUBLIC_IP:8080/healthz`.
 - `HEAD /api/stream/:id` — video metadata.
 
 There is no app login in this experimental configuration.
+
+<!-- Trigger initial Oracle VPS deployment -->
